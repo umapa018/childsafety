@@ -1,14 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, Animated } from 'react-native';
-import MapView, { Circle, Marker, PROVIDER_GOOGLE } from './NativeMap';
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useChildLocation } from '../../hooks/useChildLocation';
-import { Platform } from 'react-native';
 
 const SAFE_ZONE = {
-    latitude: 12.9977,
-    longitude: 80.0972,
-    radiusMetres: 500,
+    latitude: 12.970713,   // actual location
+    longitude: 80.043253,
+    radiusMetres: 200,     // 200m
 };
 
 export default function LiveMap() {
@@ -63,8 +63,8 @@ export default function LiveMap() {
                     region={{
                         latitude: childCoord.latitude,
                         longitude: childCoord.longitude,
-                        latitudeDelta: 0.015,
-                        longitudeDelta: 0.015,
+                        latitudeDelta: 0.006,
+                        longitudeDelta: 0.006,
                     }}
                 >
                     {/* Safe zone circle */}

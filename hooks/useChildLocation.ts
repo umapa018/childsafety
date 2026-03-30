@@ -1,5 +1,5 @@
+import { off, onValue, ref } from 'firebase/database';
 import { useEffect, useState } from 'react';
-import { ref, onValue, off } from 'firebase/database';
 import { db } from '../services/firebase';
 
 export interface ChildData {
@@ -16,11 +16,11 @@ export function useChildLocation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Safe zone definition — matches what the ESP8266 checks against
+  // Safe zone — must match ESP8266 config exactly
   const SAFE_ZONE = {
-    latitude: 12.9977,
-    longitude: 80.0972,
-    radiusKm: 0.5, // 500 metres
+    latitude: 12.970713,   // actual location
+    longitude: 80.043253,
+    radiusKm: 0.2,         // 200 metres
   };
 
   useEffect(() => {
