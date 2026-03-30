@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import MapView, { Marker, Circle, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from "../../components/map/NativeMap";
 import { useChildLocation } from "../../hooks/useChildLocation";
 
 const SAFE_ZONE = { latitude: 12.9977, longitude: 80.0972, radiusMetres: 500 };

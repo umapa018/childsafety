@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, Animated } from 'react-native';
-import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from './NativeMap';
 import { Ionicons } from '@expo/vector-icons';
 import { useChildLocation } from '../../hooks/useChildLocation';
 import { Platform } from 'react-native';
