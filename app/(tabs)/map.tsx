@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from "react-native-maps";
 import { useChildLocation } from "../../hooks/useChildLocation";
 
-const SAFE_ZONE = { latitude: 12.9977, longitude: 80.0972, radiusMetres: 500 };
+const SAFE_ZONE = { latitude: 12.970713, longitude: 80.043253, radiusMetres: 200 };
 const SAFE_ZONE_RADIUS_KM = 0.5;
 
 function getDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -96,8 +96,8 @@ export default function MapScreen() {
           region={{
             latitude: childCoord.latitude,
             longitude: childCoord.longitude,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
+            latitudeDelta: 0.006,
+            longitudeDelta: 0.006,
           }}
         >
           {/* Safe zone circle */}
