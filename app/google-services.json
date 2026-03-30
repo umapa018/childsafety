@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "384083933950",
+    "firebase_url": "https://child-safety-c8d17-default-rtdb.firebaseio.com",
+    "project_id": "child-safety-c8d17",
+    "storage_bucket": "child-safety-c8d17.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:384083933950:android:b18056c8b29324deefc3af",
+        "android_client_info": {
+          "package_name": "com.secure.childsafety"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJh0TupmtSjiOubqeG49_G8jeQuw-NO0A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

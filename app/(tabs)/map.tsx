@@ -1,195 +1,277 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Platform,
-  Dimensions,
   ScrollView,
   Switch,
   Linking,
   Alert,
+  Animated,
+  Vibration,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from "react-native-maps";
+import { useChildLocation } from "../../hooks/useChildLocation";
 
-const HOME_LOC = { latitude: 12.9977, longitude: 80.0972 }; // Kundrathur
+const SAFE_ZONE = { latitude: 12.9977, longitude: 80.0972, radiusMetres: 500 };
+const SAFE_ZONE_RADIUS_KM = 0.5;
 
 function getDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Earth's radius in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return (R * c).toFixed(1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 export default function MapScreen() {
   const [activeTab, setActiveTab] = useState("Map");
   const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const { childData, isOutsideZone, loading } = useChildLocation();
 
-  // useMemo prevents children from getting new random photos on every small re-render
-  const children = useMemo(() => {
-    const kids = [
-      { 
-        id: 1, 
-        name: "Arun", 
-        loc: { latitude: 12.8904, longitude: 80.0779 }, // Vandalur
-        status: "At School",
-        seed: Math.floor(Math.random() * 1000) 
-      },
-      { 
-        id: 2, 
-        name: "Aditi", 
-        loc: { latitude: 13.0541, longitude: 80.2836 }, // Marina Beach
-        status: "At Beach",
-        seed: Math.floor(Math.random() * 1000) 
-      },
-    ];
-    return kids.map(k => ({
-      ...k,
-      distance: getDistanceInKm(HOME_LOC.latitude, HOME_LOC.longitude, k.loc.latitude, k.loc.longitude)
-    }));
-  }, []);
+  // Alert banner pulse animation
+  const alertAnim = useRef(new Animated.Value(0)).current;
+  const prevAlertRef = useRef(false);
 
-  const makeSOSCall = () => {
-    Linking.openURL('tel:100'); // Triggers the dialer
+  const childCoord = {
+    latitude: childData?.location.lat ?? SAFE_ZONE.latitude,
+    longitude: childData?.location.lng ?? SAFE_ZONE.longitude,
   };
+  const distanceFromHome = getDistanceInKm(
+    SAFE_ZONE.latitude, SAFE_ZONE.longitude,
+    childCoord.latitude, childCoord.longitude
+  );
 
-  // --- SCREEN RENDERS ---
+  // Trigger alert notification when alert flag flips to true
+  useEffect(() => {
+    if (isOutsideZone && !prevAlertRef.current && alertsEnabled) {
+      // In-app alert dialog
+      Alert.alert(
+        "🚨 CHILD SAFETY ALERT",
+        `Your child has left the safe zone!\n\nCurrent distance: ${distanceFromHome.toFixed(2)} km from home.\n\nTake immediate action.`,
+        [
+          { text: "Dismiss", style: "cancel" },
+          { text: "Call Emergency (100)", onPress: () => Linking.openURL("tel:100") },
+        ]
+      );
+      // Vibrate pattern: --- . --- (SOS-like)
+      Vibration.vibrate([500, 200, 500, 200, 500]);
+    }
+    prevAlertRef.current = isOutsideZone;
+  }, [isOutsideZone]);
+
+  // Fade-pulse animation for the alert banner
+  useEffect(() => {
+    if (isOutsideZone) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(alertAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+          Animated.timing(alertAnim, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      alertAnim.stopAnimation();
+      alertAnim.setValue(0);
+    }
+  }, [isOutsideZone]);
+
+  const makeSOSCall = () => Linking.openURL("tel:100");
+
+  // ── RENDERS ──────────────────────────────────────────────────────────────
 
   const renderMap = () => (
     <View style={styles.content}>
       {Platform.OS !== "web" ? (
         <MapView
           style={styles.map}
-          // Only force Google on Android. iOS will default to Apple Maps which works instantly without an API key. 
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          initialRegion={{
-            latitude: 12.9716,
-            longitude: 80.18,
-            latitudeDelta: 0.4,
-            longitudeDelta: 0.4,
+          provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+          region={{
+            latitude: childCoord.latitude,
+            longitude: childCoord.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
           }}
         >
-          <Marker coordinate={HOME_LOC} anchor={{ x: 0.5, y: 1 }}>
+          {/* Safe zone circle */}
+          <Circle
+            center={SAFE_ZONE}
+            radius={SAFE_ZONE.radiusMetres}
+            strokeColor={isOutsideZone ? "#ef4444" : "#10b981"}
+            strokeWidth={2}
+            fillColor={isOutsideZone ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.15)"}
+          />
+
+          {/* Home marker */}
+          <Marker coordinate={SAFE_ZONE} anchor={{ x: 0.5, y: 1 }}>
             <View style={styles.childMarkerWrapper}>
               <View style={styles.homeMarker}>
-                <Ionicons name="home" size={24} color="white" />
+                <Ionicons name="home" size={22} color="white" />
               </View>
               <View style={styles.nameTag}>
-                <Text style={styles.homeTagText}>Kundrathur (Home)</Text>
+                <Text style={styles.homeTagText}>Home (Safe Zone)</Text>
               </View>
             </View>
           </Marker>
 
-          {children.map((child) => (
-            <React.Fragment key={child.id}>
-              <Marker 
-                coordinate={child.loc} 
-                anchor={{ x: 0.5, y: 1 }}
-                onPress={() => Alert.alert(`${child.name}'s Location`, `${child.distance} km away from Home (Kundrathur)`)}
-              >
-                <View style={styles.childMarkerWrapper}>
-                  <Image 
-                    source={{ uri: `https://picsum.photos/seed/${child.seed}/200/200` }} 
-                    style={styles.childPhoto} 
-                  />
-                  <View style={styles.nameTag}>
-                    <Text style={styles.nameTagText}>{child.name} • {child.distance} km</Text>
-                  </View>
-                </View>
-              </Marker>
-              <Circle 
-                center={child.loc} 
-                radius={1500} 
-                fillColor="rgba(79, 70, 229, 0.1)" 
-                strokeColor="#4f46e5" 
-              />
-            </React.Fragment>
-          ))}
+          {/* Child live marker */}
+          <Marker
+            coordinate={childCoord}
+            anchor={{ x: 0.5, y: 0.5 }}
+            onPress={() =>
+              Alert.alert(
+                "Child's Location",
+                `Lat: ${childCoord.latitude.toFixed(5)}\nLng: ${childCoord.longitude.toFixed(5)}\nDistance from home: ${distanceFromHome.toFixed(2)} km\nStatus: ${isOutsideZone ? "⚠️ Outside safe zone" : "✅ Inside safe zone"}`
+              )
+            }
+          >
+            <View style={[styles.liveMarker, isOutsideZone && styles.liveMarkerAlert]}>
+              <Ionicons name={isOutsideZone ? "warning" : "person"} size={20} color="white" />
+            </View>
+          </Marker>
         </MapView>
       ) : (
         <View style={styles.webFallback}>
-          <Text>Map View - Chennai (Mobile Only)</Text>
+          <Text>Map View — Mobile only</Text>
         </View>
       )}
-      <View style={styles.floatingHeader}>
-        <Text style={styles.statusText}>🟢 Both Children are Safe</Text>
+
+      {/* Status floating header */}
+      {isOutsideZone ? (
+        <Animated.View style={[styles.floatingHeader, styles.headerAlert, { opacity: alertAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0.7, 1] }) }]}>
+          <Ionicons name="warning" size={16} color="white" style={{ marginRight: 6 }} />
+          <Text style={styles.alertStatusText}>⚠️ CHILD OUTSIDE SAFE ZONE</Text>
+        </Animated.View>
+      ) : (
+        <View style={styles.floatingHeader}>
+          <Text style={styles.statusText}>
+            {loading ? "🔄 Connecting…" : "🟢 Child is Safe"}
+          </Text>
+        </View>
+      )}
+
+      {/* Coordinate pill */}
+      <View style={styles.coordPill}>
+        <Text style={styles.coordText}>
+          {childCoord.latitude.toFixed(5)}, {childCoord.longitude.toFixed(5)}
+        </Text>
       </View>
     </View>
   );
 
   const renderActivity = () => (
-    <ScrollView style={styles.content}>
+    <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
       <Text style={styles.pageTitle}>Live Activity</Text>
-      {children.map(child => (
-        <View key={child.id} style={styles.listCard}>
-          <View style={styles.activityAvatarWrapper}>
-             <Image source={{ uri: `https://picsum.photos/seed/${child.seed}/100/100` }} style={styles.activityAvatar} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 15 }}>
-            <Text style={styles.boldText}>{child.name} • {child.status}</Text>
-            <Text style={styles.subText}>{child.distance} km from Home</Text>
-          </View>
-          <Text style={styles.statusBadge}>Live</Text>
+
+      {/* Alert banner */}
+      {isOutsideZone && (
+        <Animated.View style={[styles.alertBanner, { opacity: alertAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0.7, 1] }) }]}>
+          <Ionicons name="warning" size={22} color="white" />
+          <Text style={styles.alertBannerText}>Child is OUTSIDE the safe zone!</Text>
+        </Animated.View>
+      )}
+
+      <View style={styles.listCard}>
+        <View style={styles.liveIndicator}>
+          <View style={[styles.liveDot, !isOutsideZone && styles.liveDotGreen]} />
+          <Text style={[styles.liveLabel, !isOutsideZone && { color: "#10b981" }]}>
+            {loading ? "Connecting" : isOutsideZone ? "ALERT" : "LIVE"}
+          </Text>
         </View>
-      ))}
+        <View style={{ flex: 1, marginLeft: 15 }}>
+          <Text style={styles.boldText}>
+            Your Child • {isOutsideZone ? "⚠️ Outside Zone" : "✅ In Safe Zone"}
+          </Text>
+          <Text style={styles.subText}>
+            {distanceFromHome.toFixed(2)} km from Home
+          </Text>
+          <Text style={styles.coordSubText}>
+            {childCoord.latitude.toFixed(5)}, {childCoord.longitude.toFixed(5)}
+          </Text>
+        </View>
+        <View style={[styles.statusBadgeContainer, isOutsideZone && styles.statusBadgeDanger]}>
+          <Text style={[styles.statusBadge, isOutsideZone && styles.statusBadgeTextDanger]}>
+            {isOutsideZone ? "ALERT" : "Safe"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Timeline of status */}
+      <Text style={styles.sectionTitle}>Device Info</Text>
+      <View style={styles.infoCard}>
+        <InfoRow icon="location" label="Latitude" value={childCoord.latitude.toFixed(6)} />
+        <InfoRow icon="navigate" label="Longitude" value={childCoord.longitude.toFixed(6)} />
+        <InfoRow icon="resize" label="Distance from Home" value={`${distanceFromHome.toFixed(3)} km`} />
+        <InfoRow icon="shield-checkmark" label="Safe Zone Radius" value={`${SAFE_ZONE_RADIUS_KM * 1000} m`} />
+        <InfoRow icon="warning" label="Alert Status" value={isOutsideZone ? "🔴 TRIGGERED" : "🟢 Normal"} />
+      </View>
     </ScrollView>
   );
 
   const renderZones = () => (
-    <ScrollView style={styles.content}>
-      <Text style={styles.pageTitle}>Geofence Management</Text>
-      <View style={[styles.listCard, { borderLeftColor: '#10b981', borderLeftWidth: 6 }]}>
-        <View style={{flex: 1}}>
-          <Text style={styles.boldText}>Vandalur School Zone</Text>
-          <Text style={styles.subText}>Safe Zone • 1.5km Radius</Text>
+    <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
+      <Text style={styles.pageTitle}>Geofence Zones</Text>
+      <View style={[styles.listCard, { borderLeftColor: isOutsideZone ? "#ef4444" : "#10b981", borderLeftWidth: 6 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.boldText}>Home Safe Zone</Text>
+          <Text style={styles.subText}>500 m Radius • ESP8266 Monitored</Text>
+          <Text style={styles.subText}>
+            Centre: {SAFE_ZONE.latitude}, {SAFE_ZONE.longitude}
+          </Text>
         </View>
-        <Ionicons name="shield-checkmark" size={24} color="#10b981" />
-      </View>
-      <View style={[styles.listCard, { borderLeftColor: '#ef4444', borderLeftWidth: 6 }]}>
-        <View style={{flex: 1}}>
-          <Text style={styles.boldText}>Marina Beach Coast</Text>
-          <Text style={styles.subText}>Danger Zone • Alerts Enabled</Text>
-        </View>
-        <Ionicons name="warning" size={24} color="#ef4444" />
+        <Ionicons
+          name={isOutsideZone ? "warning" : "shield-checkmark"}
+          size={28}
+          color={isOutsideZone ? "#ef4444" : "#10b981"}
+        />
       </View>
     </ScrollView>
   );
 
   const renderSettings = () => (
-    <ScrollView style={styles.content}>
+    <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 20 }}>
       <Text style={styles.pageTitle}>Security Settings</Text>
       <View style={styles.listCard}>
         <View>
           <Text style={styles.boldText}>Push Notifications</Text>
-          <Text style={styles.subText}>Alert on zone entry/exit</Text>
+          <Text style={styles.subText}>Alert when child leaves safe zone</Text>
         </View>
-        <Switch value={alertsEnabled} onValueChange={setAlertsEnabled} trackColor={{ true: '#4f46e5' }} />
+        <Switch
+          value={alertsEnabled}
+          onValueChange={setAlertsEnabled}
+          trackColor={{ true: "#4f46e5" }}
+        />
       </View>
-      
+
       <TouchableOpacity style={styles.sosButton} onPress={makeSOSCall}>
         <Ionicons name="call" size={24} color="white" />
-        <Text style={styles.sosText}>IMMEDIATE SOS CALL</Text>
+        <Text style={styles.sosText}>IMMEDIATE SOS CALL (100)</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Dynamic Screen Area */}
+      {/* Global alert strip when child is outside */}
+      {isOutsideZone && (
+        <View style={styles.topAlertStrip}>
+          <Ionicons name="warning" size={14} color="white" />
+          <Text style={styles.topAlertText}>  ALERT: Child left safe zone — {distanceFromHome.toFixed(2)} km away</Text>
+        </View>
+      )}
+
       {activeTab === "Map" && renderMap()}
       {activeTab === "Activity" && renderActivity()}
       {activeTab === "Zones" && renderZones()}
       {activeTab === "Settings" && renderSettings()}
 
-      {/* Bottom Navigation */}
       <View style={styles.tabs}>
         <Tab icon="map" label="Map" active={activeTab === "Map"} onPress={() => setActiveTab("Map")} />
         <Tab icon="pulse" label="Activity" active={activeTab === "Activity"} onPress={() => setActiveTab("Activity")} />
@@ -200,7 +282,7 @@ export default function MapScreen() {
   );
 }
 
-// --- SUB-COMPONENTS ---
+// ── SUB-COMPONENTS ───────────────────────────────────────────────────────────
 
 const Tab = ({ icon, label, active, onPress }: any) => (
   <TouchableOpacity style={styles.tabItem} onPress={onPress}>
@@ -209,45 +291,81 @@ const Tab = ({ icon, label, active, onPress }: any) => (
   </TouchableOpacity>
 );
 
-// --- STYLES ---
+const InfoRow = ({ icon, label, value }: { icon: any; label: string; value: string }) => (
+  <View style={styles.infoRow}>
+    <Ionicons name={icon} size={16} color="#6b7280" style={{ marginRight: 10 }} />
+    <Text style={styles.infoLabel}>{label}</Text>
+    <Text style={styles.infoValue}>{value}</Text>
+  </View>
+);
+
+// ── STYLES ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f9fafb" },
   content: { flex: 1 },
   map: { ...StyleSheet.absoluteFillObject },
-  webFallback: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
-  // Header
-  floatingHeader: { position: 'absolute', top: 20, alignSelf: 'center', backgroundColor: 'white', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 30, elevation: 5, shadowOpacity: 0.1 },
-  statusText: { fontWeight: 'bold', color: '#10b981' },
-  
-  // Page Titles
-  pageTitle: { fontSize: 26, fontWeight: '800', padding: 20, color: '#111827' },
-  
-  // List Items
-  listCard: { backgroundColor: 'white', marginHorizontal: 15, marginVertical: 8, padding: 20, borderRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
-  boldText: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
-  subText: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  statusBadge: { backgroundColor: '#e0e7ff', color: '#4f46e5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, fontSize: 12, fontWeight: 'bold', overflow: 'hidden' },
-  
-  // Activity Avatars
-  activityAvatarWrapper: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#eee', overflow: 'hidden' },
-  activityAvatar: { width: '100%', height: '100%' },
+  webFallback: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  // Marker Styles
-  homeMarker: { backgroundColor: '#10b981', padding: 8, borderRadius: 20, borderWidth: 2, borderColor: 'white', elevation: 5 },
-  childMarkerWrapper: { alignItems: 'center', justifyContent: 'center', paddingBottom: 5 },
-  childPhoto: { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: 'white', backgroundColor: '#ddd' },
-  nameTag: { backgroundColor: 'white', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 4, elevation: 4 },
-  nameTagText: { fontSize: 12, fontWeight: '800', color: '#1f2937' },
-  homeTagText: { fontSize: 12, fontWeight: '800', color: '#10b981' },
+  // Top alert strip
+  topAlertStrip: { backgroundColor: "#ef4444", flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 6, paddingHorizontal: 12 },
+  topAlertText: { color: "white", fontSize: 12, fontWeight: "700" },
 
-  // Settings & Buttons
-  sosButton: { backgroundColor: '#ef4444', margin: 20, padding: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', elevation: 4 },
-  sosText: { color: 'white', fontWeight: '800', fontSize: 18, marginLeft: 10 },
+  // Floating map header
+  floatingHeader: { position: "absolute", top: 16, alignSelf: "center", backgroundColor: "white", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 30, elevation: 6, shadowOpacity: 0.12, flexDirection: "row", alignItems: "center" },
+  headerAlert: { backgroundColor: "#ef4444" },
+  statusText: { fontWeight: "700", color: "#10b981" },
+  alertStatusText: { fontWeight: "800", color: "white", fontSize: 13 },
 
-  // Navigation Tabs
-  tabs: { flexDirection: "row", justifyContent: "space-around", backgroundColor: "white", paddingVertical: 12, paddingBottom: Platform.OS === 'ios' ? 30 : 15, borderTopWidth: 1, borderColor: "#e5e7eb" },
+  // Coordinate pill
+  coordPill: { position: "absolute", bottom: 20, alignSelf: "center", backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  coordText: { color: "white", fontSize: 11 },
+
+  // Page titles
+  pageTitle: { fontSize: 26, fontWeight: "800", padding: 20, color: "#111827" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6, color: "#6b7280" },
+
+  // Alert banner in Activity
+  alertBanner: { backgroundColor: "#ef4444", marginHorizontal: 15, marginBottom: 8, padding: 14, borderRadius: 16, flexDirection: "row", alignItems: "center", gap: 10, elevation: 4 },
+  alertBannerText: { color: "white", fontWeight: "800", fontSize: 15, flex: 1 },
+
+  // List / Info cards
+  listCard: { backgroundColor: "white", marginHorizontal: 15, marginVertical: 8, padding: 18, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10 },
+  infoCard: { backgroundColor: "white", marginHorizontal: 15, marginVertical: 4, padding: 16, borderRadius: 20, elevation: 2 },
+  infoRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  infoLabel: { flex: 1, fontSize: 14, color: "#6b7280" },
+  infoValue: { fontSize: 14, fontWeight: "700", color: "#1f2937" },
+
+  boldText: { fontSize: 16, fontWeight: "700", color: "#1f2937" },
+  subText: { fontSize: 13, color: "#6b7280", marginTop: 2 },
+  coordSubText: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
+
+  // Live indicator
+  liveIndicator: { alignItems: "center", gap: 4 },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#ef4444" },
+  liveDotGreen: { backgroundColor: "#10b981" },
+  liveLabel: { fontSize: 10, fontWeight: "800", color: "#ef4444" },
+
+  // Status badge
+  statusBadgeContainer: { backgroundColor: "#e0e7ff", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusBadgeDanger: { backgroundColor: "#fee2e2" },
+  statusBadge: { color: "#4f46e5", fontSize: 12, fontWeight: "800" },
+  statusBadgeTextDanger: { color: "#ef4444" },
+
+  // Map markers
+  homeMarker: { backgroundColor: "#10b981", padding: 8, borderRadius: 20, borderWidth: 2, borderColor: "white", elevation: 5 },
+  childMarkerWrapper: { alignItems: "center" },
+  nameTag: { backgroundColor: "white", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 4, elevation: 4 },
+  homeTagText: { fontSize: 11, fontWeight: "800", color: "#10b981" },
+  liveMarker: { backgroundColor: "#4f46e5", padding: 10, borderRadius: 25, borderWidth: 3, borderColor: "white", elevation: 6 },
+  liveMarkerAlert: { backgroundColor: "#ef4444" },
+
+  // SOS
+  sosButton: { backgroundColor: "#ef4444", margin: 20, padding: 20, borderRadius: 20, flexDirection: "row", justifyContent: "center", alignItems: "center", elevation: 4 },
+  sosText: { color: "white", fontWeight: "800", fontSize: 16, marginLeft: 10 },
+
+  // Tabs
+  tabs: { flexDirection: "row", justifyContent: "space-around", backgroundColor: "white", paddingVertical: 12, paddingBottom: Platform.OS === "ios" ? 30 : 15, borderTopWidth: 1, borderColor: "#e5e7eb" },
   tabItem: { alignItems: "center" },
-  tabLabel: { fontSize: 11, marginTop: 4, fontWeight: '600' }
+  tabLabel: { fontSize: 11, marginTop: 4, fontWeight: "600" },
 });
