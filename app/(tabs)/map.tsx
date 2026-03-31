@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useRef } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  ScrollView,
-  Switch,
-  Linking,
   Alert,
   Animated,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
   Vibration,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import MapView, { Marker, Circle, PROVIDER_GOOGLE } from "../../components/map/NativeMap";
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from "../../components/map/NativeMap";
 import { useChildLocation } from "../../hooks/useChildLocation";
 
 const SAFE_ZONE = { latitude: 12.970713, longitude: 80.043253, radiusMetres: 200 };
-const SAFE_ZONE_RADIUS_KM = 0.5;
+const SAFE_ZONE_RADIUS_KM = 0.2;
 
 function getDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
@@ -133,13 +133,22 @@ export default function MapScreen() {
             }
           >
             <View style={[styles.liveMarker, isOutsideZone && styles.liveMarkerAlert]}>
-              <Ionicons name={isOutsideZone ? "warning" : "person"} size={20} color="white" />
+              <Text style={{ fontSize: 22 }}>{isOutsideZone ? "🏃‍♂️" : "🧒"}</Text>
             </View>
           </Marker>
         </MapView>
       ) : (
-        <View style={styles.webFallback}>
-          <Text>Map View — Mobile only</Text>
+        <View style={styles.map}>
+          {/* @ts-ignore */}
+          <iframe
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            style={{ border: 0 }}
+            src={`https://maps.google.com/maps?q=${childCoord.latitude},${childCoord.longitude}&z=15&output=embed`}
+            allowFullScreen
+            title="live-map-web"
+          />
         </View>
       )}
 
@@ -221,7 +230,7 @@ export default function MapScreen() {
       <View style={[styles.listCard, { borderLeftColor: isOutsideZone ? "#ef4444" : "#10b981", borderLeftWidth: 6 }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.boldText}>Home Safe Zone</Text>
-          <Text style={styles.subText}>500 m Radius • ESP8266 Monitored</Text>
+          <Text style={styles.subText}>200 m Radius • ESP8266 Monitored</Text>
           <Text style={styles.subText}>
             Centre: {SAFE_ZONE.latitude}, {SAFE_ZONE.longitude}
           </Text>

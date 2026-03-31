@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, Animated } from 'react-native';
-import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { useChildLocation } from '../../hooks/useChildLocation';
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from './NativeMap';
 
 const SAFE_ZONE = {
     latitude: 12.970713,   // actual location
@@ -95,11 +94,9 @@ export default function LiveMap() {
                             isOutsideZone && styles.childMarkerAlert,
                             { transform: [{ scale: pulseAnim }] }
                         ]}>
-                            <Ionicons
-                                name={isOutsideZone ? 'warning' : 'person'}
-                                size={20}
-                                color="white"
-                            />
+                            <Text style={{ fontSize: 22 }}>
+                                {isOutsideZone ? '🏃‍♂️' : '🧒'}
+                            </Text>
                         </Animated.View>
                     </Marker>
                 </MapView>
